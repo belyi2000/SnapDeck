@@ -45,14 +45,16 @@ BUILD=$((CURRENT_BUILD + 1))
 ./Scripts/build-app.sh
 
 RELEASE_DIR="$ROOT/.release"
-mkdir -p "$RELEASE_DIR"
+BUILD_DIR="$RELEASE_DIR/$VERSION"
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
 
-ZIP="$RELEASE_DIR/SnapDeck-$VERSION.zip"
+ZIP="$BUILD_DIR/SnapDeck-$VERSION.zip"
 rm -f "$ZIP"
 # Keep the .app at the archive root: Sparkle and app translocation rely on it.
 ditto -c -k --sequesterRsrc --keepParent "$ROOT/dist/SnapDeck.app" "$ZIP"
 
-NOTES="$RELEASE_DIR/SnapDeck-$VERSION.md"
+NOTES="$BUILD_DIR/SnapDeck-$VERSION.md"
 if [[ ! -f "$NOTES" ]]; then
     PREV_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
     {
@@ -73,14 +75,15 @@ if [[ ! -x "$SPARKLE_BIN/generate_appcast" ]]; then
     exit 1
 fi
 
-# Deltas are disabled: they would need to be uploaded alongside the appcast.
+# The feed contains only this release. Keeping old archives out of the scan
+# directory avoids rewrite of their enclosure URLs to the new tag.
 "$SPARKLE_BIN/generate_appcast" \
     --download-url-prefix "https://github.com/$REPO/releases/download/$TAG/" \
     --embed-release-notes \
     --maximum-deltas 0 \
     --link "https://github.com/$REPO" \
-    -o "$RELEASE_DIR/appcast.xml" \
-    "$RELEASE_DIR"
+    -o "$BUILD_DIR/appcast.xml" \
+    "$BUILD_DIR"
 
 DMG_DIR="$RELEASE_DIR/dmg"
 mkdir -p "$DMG_DIR"
@@ -94,8 +97,8 @@ rm -f "$DMG"
 hdiutil create -quiet -volname "SnapDeck" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 rm -rf "$STAGE"
 
-SHA_FILE="$RELEASE_DIR/SHA256.txt"
-shasum -a 256 "$ZIP" "$DMG" | sed "s|$RELEASE_DIR/||" > "$SHA_FILE"
+SHA_FILE="$BUILD_DIR/SHA256.txt"
+shasum -a 256 "$ZIP" "$DMG" | sed "s|$BUILD_DIR/||" > "$SHA_FILE"
 cat "$SHA_FILE"
 
 git add "$PLIST"
@@ -107,7 +110,7 @@ git push origin "$TAG"
 gh release create "$TAG" \
     "$ZIP" \
     "$DMG" \
-    "$RELEASE_DIR/appcast.xml" \
+    "$BUILD_DIR/appcast.xml" \
     "$SHA_FILE" \
     --title "SnapDeck $VERSION" \
     --notes-file "$NOTES"
