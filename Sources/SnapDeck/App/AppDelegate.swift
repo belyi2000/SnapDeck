@@ -144,6 +144,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.openSettings()
             }
         }
+        // Used by release tests and automation: launch with --check-for-updates.
+        if CommandLine.arguments.contains("--check-for-updates") {
+            DispatchQueue.main.async { [weak self] in
+                self?.updates.checkForUpdates(nil)
+            }
+        }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
