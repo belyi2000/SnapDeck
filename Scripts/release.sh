@@ -82,8 +82,10 @@ fi
     -o "$RELEASE_DIR/appcast.xml" \
     "$RELEASE_DIR"
 
-DMG="$RELEASE_DIR/SnapDeck-$VERSION.dmg"
-STAGE="$RELEASE_DIR/dmg-stage"
+DMG_DIR="$RELEASE_DIR/dmg"
+mkdir -p "$DMG_DIR"
+DMG="$DMG_DIR/SnapDeck-$VERSION.dmg"
+STAGE="$DMG_DIR/dmg-stage-$VERSION"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 ditto "$ROOT/dist/SnapDeck.app" "$STAGE/SnapDeck.app"
@@ -93,7 +95,7 @@ hdiutil create -quiet -volname "SnapDeck" -srcfolder "$STAGE" -ov -format UDZO "
 rm -rf "$STAGE"
 
 SHA_FILE="$RELEASE_DIR/SHA256.txt"
-(cd "$RELEASE_DIR" && shasum -a 256 "SnapDeck-$VERSION.zip" "SnapDeck-$VERSION.dmg" > "SHA256.txt")
+shasum -a 256 "$ZIP" "$DMG" | sed "s|$RELEASE_DIR/||" > "$SHA_FILE"
 cat "$SHA_FILE"
 
 git add "$PLIST"
