@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>ru</string>
+    <key>CFBundleDisplayName</key>
+    <string>SnapDeck</string>
+    <key>CFBundleExecutable</key>
+    <string>SnapDeck</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.dmitry.snapdeck</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>SnapDeck</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.6.0</string>
+    <key>CFBundleVersion</key>
+    <string>6</string>
+    <key>SUFeedURL</key>
+    <string>https://github.com/belyi2000/SnapDeck/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>YU0/IiY+KSHwREco78TJF7sccjZI0RXGujcn5ADlpKc=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
+    <key>SUAllowsAutomaticUpdates</key>
+    <false/>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSMultipleInstancesProhibited</key>
+    <true/>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>SnapDeck использует Accessibility для перемещения и изменения размера окон.</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 SnapDeck contributors</string>
+    <key>NSInputMonitoringUsageDescription</key>
+    <string>SnapDeck читает события перетаскивания, чтобы показывать зону прилипания.</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+</dict>
+</plist>
