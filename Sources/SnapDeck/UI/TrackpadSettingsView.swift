@@ -39,8 +39,10 @@ struct TrackpadSettingsView: View {
                 }
 
                 controlCard
+                behaviorCard
                 gesturesCard
                 sensitivityCard
+                autostartCard
                 diagnosticsCard
                 Spacer(minLength: 4)
             }
@@ -50,6 +52,7 @@ struct TrackpadSettingsView: View {
         }
         .onAppear {
             trackpad.refreshStatus()
+            settings.refreshLaunchAtLoginStatus()
             if settings.trackpadGesturesEnabled {
                 trackpad.startIfEnabled()
             }
@@ -209,6 +212,58 @@ struct TrackpadSettingsView: View {
         }
     }
 
+    private var behaviorCard: some View {
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 0) {
+                SettingToggleRow(
+                    title: "Повторный свайп вверх возвращает окно",
+                    subtitle: "Первый свайп 3 пальцами вверх разворачивает окно, второй — возвращает прежний размер. Если окно в настоящем macOS fullscreen, жест выходит из него.",
+                    isOn: $settings.trackpadUpToggleEnabled
+                )
+
+                Divider().padding(.vertical, 13)
+
+                SettingToggleRow(
+                    title: "Закрывать приложение долгим свайпом",
+                    subtitle: "Разрешает закрытие приложения длинным свайпом вправо. Обычное завершение приложения: если документ не сохранён, macOS спросит.",
+                    isOn: $settings.closeApplicationGestureEnabled
+                )
+
+                Divider().padding(.vertical, 13)
+
+                SettingToggleRow(
+                    title: "Два пальца вправо",
+                    subtitle: "Дополнительный способ закрытия: длинный свайп двумя пальцами. Горизонтальный двухпальцевый скролл может кратковременно подавляться.",
+                    isOn: $settings.closeWithTwoFingers
+                )
+                .disabled(!settings.closeApplicationGestureEnabled)
+
+                Divider().padding(.vertical, 13)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Длина свайпа для закрытия")
+                            .font(.system(size: 13, weight: .semibold))
+                        Spacer()
+                        Text("\(Int(settings.closeSwipeDistance * 100))%")
+                            .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(
+                        value: $settings.closeSwipeDistance,
+                        in: 0.10...0.40,
+                        step: 0.01
+                    )
+                    .disabled(!settings.closeApplicationGestureEnabled)
+                    Text("Процент — доля ширины трекпада, которую нужно пройти. Работает и для 4 пальцев, и для 2 пальцев.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.tertiary)
+                }
+                .opacity(settings.closeApplicationGestureEnabled ? 1 : 0.45)
+            }
+        }
+    }
+
     private var gesturesCard: some View {
         SettingsCard {
             VStack(alignment: .leading, spacing: 14) {
@@ -220,16 +275,27 @@ struct TrackpadSettingsView: View {
 
                 VStack(spacing: 12) {
                     GestureRow(gesture: "3 пальца влево / вправо", action: "Прижать к половине", symbol: "arrow.left.and.right")
-                    GestureRow(gesture: "3 пальца вверх", action: "Развернуть окно", symbol: "arrow.up")
+                    GestureRow(
+                        gesture: "3 пальца вверх",
+                        action: settings.trackpadUpToggleEnabled
+                            ? "Развернуть / вернуть"
+                            : "Развернуть окно",
+                        symbol: "arrow.up"
+                    )
                     GestureRow(gesture: "3 пальца вниз", action: "Свернуть активное окно", symbol: "arrow.down")
                     GestureRow(gesture: "4 пальца вверх", action: "Развернуть все свёрнутые окна", symbol: "arrow.up.to.line")
                     GestureRow(gesture: "4 пальца вниз", action: "Свернуть все окна", symbol: "rectangle.stack")
-                    GestureRow(gesture: "4 пальца вправо, длинный свайп", action: "Закрыть приложение", symbol: "xmark.rectangle")
+                    if settings.closeApplicationGestureEnabled {
+                        GestureRow(gesture: "4 пальца вправо, длинный свайп", action: "Закрыть приложение", symbol: "xmark.rectangle")
+                    }
+                    if settings.closeApplicationGestureEnabled && settings.closeWithTwoFingers {
+                        GestureRow(gesture: "2 пальца вправо, длинный свайп", action: "Закрыть приложение", symbol: "xmark.rectangle")
+                    }
                 }
 
                 HStack(alignment: .top, spacing: 7) {
                     Image(systemName: "info.circle")
-                    Text("Для закрытия приложения свайп вправо должен быть заметно длиннее остальных. Короткий свайп и свайп влево ничего не делают. Приложение закрывается обычным завершением — если документ не сохранён, macOS предложит сохранить.")
+                    Text("Короткий свайп вправо и свайп влево ничего не делают. Приложение закрывается обычным завершением — если документ не сохранён, macOS предложит сохранить.")
                 }
                 .font(.system(size: 10.5))
                 .foregroundStyle(.tertiary)
@@ -257,6 +323,32 @@ struct TrackpadSettingsView: View {
                 Text("Выше — короче свайп для срабатывания. Если жесты срабатывают случайно, уменьшите значение.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var autostartCard: some View {
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 10) {
+                SettingToggleRow(
+                    title: "Запускать SnapDeck при входе в систему",
+                    subtitle: "Приложение будет автоматически появляться в строке меню и держать жесты готовыми. Используется LaunchAgent в вашей учётной записи.",
+                    isOn: Binding(
+                        get: { settings.launchAtLogin },
+                        set: { settings.setLaunchAtLogin($0) }
+                    )
+                )
+
+                if let error = settings.launchAtLoginError {
+                    Text(error)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.red)
+                }
+
+                Text("Автозапуск привязан к текущему пути приложения. Если перенести SnapDeck в другую папку, выключите и включите автозапуск заново.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

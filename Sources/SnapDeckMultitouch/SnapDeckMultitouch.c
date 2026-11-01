@@ -64,6 +64,7 @@ static bool running = false;
 static char last_error[192] = "not started";
 static int32_t last_forwarded_active_count = 0;
 static double last_forwarded_timestamp = 0;
+static int32_t minimum_contact_count = 3;
 static const double frame_interval = 1.0 / 60.0;
 
 static void set_error(const char *message) {
@@ -122,12 +123,14 @@ static int contact_frame_callback(
     pthread_mutex_lock(&state_lock);
     SDTouchFrameCallback callback = client_callback;
     void *context = client_context;
-    bool was_multi_finger = last_forwarded_active_count >= 3;
+    int32_t minimum = minimum_contact_count;
+    bool had_forwarded_touches = last_forwarded_active_count > 0;
     bool should_forward = false;
 
-    if (active_count < 3) {
-        // Send exactly one terminal frame so the recognizer can release its lock.
-        if (was_multi_finger) {
+    if (active_count < minimum) {
+        // Send terminal frames down to zero so the recognizer can release its
+        // lock only after the pad is fully empty.
+        if (had_forwarded_touches) {
             should_forward = true;
         }
     } else {
@@ -153,6 +156,21 @@ static int contact_frame_callback(
         callback(&output, context);
     }
     return 0;
+}
+
+void SDMTSetMinimumContactCount(int32_t count) {
+    if (count < 1) {
+        count = 1;
+    } else if (count > 4) {
+        count = 4;
+    }
+    pthread_mutex_lock(&state_lock);
+    if (minimum_contact_count != count) {
+        minimum_contact_count = count;
+        last_forwarded_active_count = 0;
+        last_forwarded_timestamp = 0;
+    }
+    pthread_mutex_unlock(&state_lock);
 }
 
 bool SDMTIsAvailable(void) {

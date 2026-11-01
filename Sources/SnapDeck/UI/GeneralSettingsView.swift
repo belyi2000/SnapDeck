@@ -101,29 +101,6 @@ struct GeneralSettingsView: View {
                     }
                 }
 
-                SettingsCard {
-                    VStack(alignment: .leading, spacing: 13) {
-                        SettingToggleRow(
-                            title: "Запускать при входе",
-                            subtitle: "SnapDeck будет ждать в строке меню и держать жесты и горячие клавиши готовыми.",
-                            isOn: Binding(
-                                get: { settings.launchAtLogin },
-                                set: { settings.setLaunchAtLogin($0) }
-                            )
-                        )
-
-                        if let error = settings.launchAtLoginError {
-                            Text(error)
-                                .font(.system(size: 10.5))
-                                .foregroundStyle(.red)
-                        }
-
-                        Text("Для стабильного автозапуска приложение должно лежать в /Applications.")
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-
                 howItWorks
                 Spacer(minLength: 4)
             }

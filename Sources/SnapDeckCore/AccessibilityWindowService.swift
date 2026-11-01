@@ -14,12 +14,12 @@ public final class AccessibilityWindowService {
 
     // MARK: - Focused window
 
-    public func focusedWindow() -> WindowInfo? {
+    public func focusedWindow(allowFullScreen: Bool = false) -> WindowInfo? {
         let systemWide = AXUIElementCreateSystemWide()
 
         if let focusedApp = elementAttribute(systemWide, kAXFocusedApplicationAttribute),
            let window = elementAttribute(focusedApp, kAXFocusedWindowAttribute),
-           let info = makeWindowInfo(for: window) {
+           let info = makeWindowInfo(for: window, allowFullScreen: allowFullScreen) {
             return info
         }
 
@@ -33,7 +33,11 @@ public final class AccessibilityWindowService {
         guard let window = elementAttribute(axApp, kAXFocusedWindowAttribute) else {
             return nil
         }
-        return makeWindowInfo(for: window, knownApplication: app)
+        return makeWindowInfo(
+            for: window,
+            knownApplication: app,
+            allowFullScreen: allowFullScreen
+        )
     }
 
     // MARK: - Hit testing and dragging
@@ -389,10 +393,30 @@ public final class AccessibilityWindowService {
         boolAttribute(element, fullScreenAttribute) ?? false
     }
 
+    public func isWindowMaximized(_ window: WindowInfo) -> Bool {
+        guard let screen = screen(for: window.frame) else { return false }
+        let visible = screen.visibleFrame
+        let tolerance: CGFloat = 30
+        return abs(window.frame.minX - visible.minX) <= tolerance
+            && abs(window.frame.maxY - visible.maxY) <= tolerance
+            && abs(window.frame.width - visible.width) <= tolerance
+            && abs(window.frame.height - visible.height) <= tolerance
+    }
+
+    @discardableResult
+    public func setFullScreen(_ fullScreen: Bool, for window: WindowInfo) -> Bool {
+        AXUIElementSetAttributeValue(
+            window.element,
+            fullScreenAttribute as CFString,
+            fullScreen ? kCFBooleanTrue : kCFBooleanFalse
+        ) == .success
+    }
+
     private func makeWindowInfo(
         for element: AXUIElement,
         knownApplication: NSRunningApplication? = nil,
-        allowMinimized: Bool = false
+        allowMinimized: Bool = false,
+        allowFullScreen: Bool = false
     ) -> WindowInfo? {
         var pid: pid_t = 0
         guard AXUIElementGetPid(element, &pid) == .success, pid != ownPID else { return nil }
@@ -411,7 +435,8 @@ public final class AccessibilityWindowService {
 
         let minimized = isMinimized(element)
         guard allowMinimized || !minimized else { return nil }
-        guard !isFullScreen(element) else { return nil }
+        let fullScreen = isFullScreen(element)
+        guard allowFullScreen || !fullScreen else { return nil }
         guard let frame = frame(of: element) else { return nil }
 
         let title = stringAttribute(element, kAXTitleAttribute) ?? ""
@@ -420,7 +445,8 @@ public final class AccessibilityWindowService {
             application: application,
             title: title,
             frame: frame,
-            isMinimized: minimized
+            isMinimized: minimized,
+            isFullScreen: fullScreen
         )
     }
 

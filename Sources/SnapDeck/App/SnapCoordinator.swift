@@ -69,6 +69,55 @@ final class SnapCoordinator {
         snap(window: window, to: zone, on: screen, restoreFrame: nil, showAssist: true)
     }
 
+    /// A state-aware maximize used by the 3-finger-up gesture. A second swipe
+    /// restores the previous frame; a native fullscreen window exits fullscreen.
+    func toggleMaximizeGesture() {
+        guard settings.isEnabled else { return }
+        guard permissions.accessibilityGranted else {
+            onPermissionRequired?()
+            return
+        }
+
+        hideOverlays()
+        guard let window = windows.focusedWindow(allowFullScreen: true) else {
+            return
+        }
+        let currentFrame = windows.frame(of: window) ?? window.frame
+
+        if window.isFullScreen {
+            _ = windows.setFullScreen(false, for: window)
+            snapStates.remove(windowID: window.id)
+            groupStore.removeGroups(involving: window.id)
+            return
+        }
+
+        if windows.isWindowMaximized(window) {
+            if let state = snapStates.state(for: window, currentFrame: currentFrame),
+               state.zone == .maximize {
+                _ = windows.setFrame(state.originalFrame, for: window)
+                snapStates.remove(windowID: window.id)
+                groupStore.removeGroups(involving: window.id)
+                return
+            }
+
+            if let frame = history.popFrame(for: window.id) {
+                _ = windows.setFrame(frame, for: window)
+                snapStates.remove(windowID: window.id)
+                groupStore.removeGroups(involving: window.id)
+            }
+            return
+        }
+
+        guard let screen = windows.screen(for: currentFrame) else { return }
+        snap(
+            window: window,
+            to: .maximize,
+            on: screen,
+            restoreFrame: nil,
+            showAssist: false
+        )
+    }
+
     // MARK: - Dragging
 
     func showDragPreview(_ target: DragSnapTarget?) {

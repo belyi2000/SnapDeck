@@ -72,6 +72,7 @@ final class TrackpadEventSuppressor {
 final class TouchActivityState: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
+    private var twoFingerSuppression = false
 
     func update(count: Int) {
         lock.lock()
@@ -79,9 +80,15 @@ final class TouchActivityState: @unchecked Sendable {
         lock.unlock()
     }
 
+    func setTwoFingerSuppression(_ active: Bool) {
+        lock.lock()
+        twoFingerSuppression = active
+        lock.unlock()
+    }
+
     var isSuppressing: Bool {
         lock.lock()
-        let value = count >= 3
+        let value = count >= 3 || twoFingerSuppression
         lock.unlock()
         return value
     }

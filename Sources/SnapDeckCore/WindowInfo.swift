@@ -7,6 +7,7 @@ public struct WindowInfo {
     public let title: String
     public let frame: CGRect
     public let isMinimized: Bool
+    public let isFullScreen: Bool
 
     public var pid: pid_t { application.processIdentifier }
     public var appName: String { application.localizedName ?? "Приложение" }
@@ -18,13 +19,15 @@ public struct WindowInfo {
         application: NSRunningApplication,
         title: String,
         frame: CGRect,
-        isMinimized: Bool = false
+        isMinimized: Bool = false,
+        isFullScreen: Bool = false
     ) {
         self.element = element
         self.application = application
         self.title = title
         self.frame = frame
         self.isMinimized = isMinimized
+        self.isFullScreen = isFullScreen
     }
 
     public var displayTitle: String {

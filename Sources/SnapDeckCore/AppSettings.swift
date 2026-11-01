@@ -1,6 +1,5 @@
 import Combine
 import Foundation
-import ServiceManagement
 
 @MainActor
 public final class AppSettings: ObservableObject {
@@ -38,6 +37,27 @@ public final class AppSettings: ObservableObject {
         didSet { defaults.set(trackpadGestureSensitivity, forKey: Keys.trackpadGestureSensitivity) }
     }
 
+    @Published public var trackpadUpToggleEnabled: Bool {
+        didSet { defaults.set(trackpadUpToggleEnabled, forKey: Keys.trackpadUpToggleEnabled) }
+    }
+
+    @Published public var closeApplicationGestureEnabled: Bool {
+        didSet { defaults.set(closeApplicationGestureEnabled, forKey: Keys.closeApplicationGestureEnabled) }
+    }
+
+    @Published public var closeWithTwoFingers: Bool {
+        didSet { defaults.set(closeWithTwoFingers, forKey: Keys.closeWithTwoFingers) }
+    }
+
+    @Published public var closeSwipeDistance: Double {
+        didSet {
+            defaults.set(
+                min(max(closeSwipeDistance, 0.10), 0.40),
+                forKey: Keys.closeSwipeDistance
+            )
+        }
+    }
+
     @Published public var gap: Double {
         didSet { defaults.set(min(max(gap, 0), 24), forKey: Keys.gap) }
     }
@@ -56,6 +76,10 @@ public final class AppSettings: ObservableObject {
         static let linkedResizeEnabled = "snapdeck.linkedResizeEnabled"
         static let trackpadGesturesEnabled = "snapdeck.trackpadGesturesEnabled"
         static let trackpadGestureSensitivity = "snapdeck.trackpadGestureSensitivity"
+        static let trackpadUpToggleEnabled = "snapdeck.trackpadUpToggleEnabled"
+        static let closeApplicationGestureEnabled = "snapdeck.closeApplicationGestureEnabled"
+        static let closeWithTwoFingers = "snapdeck.closeWithTwoFingers"
+        static let closeSwipeDistance = "snapdeck.closeSwipeDistance"
         static let gap = "snapdeck.gap"
     }
 
@@ -69,27 +93,27 @@ public final class AppSettings: ObservableObject {
         linkedResizeEnabled = defaults.object(forKey: Keys.linkedResizeEnabled) as? Bool ?? true
         trackpadGesturesEnabled = defaults.object(forKey: Keys.trackpadGesturesEnabled) as? Bool ?? false
         trackpadGestureSensitivity = defaults.object(forKey: Keys.trackpadGestureSensitivity) as? Double ?? 1.0
+        trackpadUpToggleEnabled = defaults.object(forKey: Keys.trackpadUpToggleEnabled) as? Bool ?? true
+        closeApplicationGestureEnabled = defaults.object(forKey: Keys.closeApplicationGestureEnabled) as? Bool ?? true
+        closeWithTwoFingers = defaults.object(forKey: Keys.closeWithTwoFingers) as? Bool ?? false
+        closeSwipeDistance = defaults.object(forKey: Keys.closeSwipeDistance) as? Double ?? 0.20
         gap = defaults.object(forKey: Keys.gap) as? Double ?? 6
-        launchAtLogin = SMAppService.mainApp.status == .enabled
+        launchAtLogin = LaunchAtLoginManager.isEnabled
     }
 
     public func setLaunchAtLogin(_ enabled: Bool) {
         launchAtLoginError = nil
         do {
-            if enabled {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
-            launchAtLogin = enabled
+            try LaunchAtLoginManager.setEnabled(enabled)
+            launchAtLogin = LaunchAtLoginManager.isEnabled
         } catch {
-            launchAtLogin = SMAppService.mainApp.status == .enabled
+            launchAtLogin = LaunchAtLoginManager.isEnabled
             launchAtLoginError = error.localizedDescription
             DeckLog.app.error("Unable to update login item: \(error.localizedDescription, privacy: .public)")
         }
     }
 
     public func refreshLaunchAtLoginStatus() {
-        launchAtLogin = SMAppService.mainApp.status == .enabled
+        launchAtLogin = LaunchAtLoginManager.isEnabled
     }
 }

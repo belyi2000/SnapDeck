@@ -26,6 +26,10 @@ final class MultitouchBridge {
         return started
     }
 
+    func setMinimumContactCount(_ count: Int) {
+        SDMTSetMinimumContactCount(Int32(count))
+    }
+
     func stop() {
         SDMTStop()
         handler = nil

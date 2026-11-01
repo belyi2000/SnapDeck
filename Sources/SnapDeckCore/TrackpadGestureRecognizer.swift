@@ -32,9 +32,13 @@ public struct TrackpadSwipeRecognizer: Sendable {
     public var sensitivity: Float
     public var axisDominance: Float
     public var spreadTolerance: Float
-    /// A 4-finger right swipe has to travel farther than a normal snap before
-    /// it is allowed to quit the frontmost app.
+    /// A close gesture has to travel farther than a normal snap before it is
+    /// allowed to quit the frontmost app. Shared by 4-finger and 2-finger close.
     public var longCloseDistance: Float
+    public var closeApplicationEnabled: Bool
+    public var twoFingerCloseEnabled: Bool
+
+    public private(set) var suppressTwoFingerScroll = false
 
     private struct Session {
         let fingers: Int
@@ -46,28 +50,70 @@ public struct TrackpadSwipeRecognizer: Sendable {
         var waitingForLongClose: Bool
     }
 
+    private struct TwoFingerSession {
+        let startX: Float
+        let startY: Float
+        let startSpread: Float
+        let startTime: Double
+    }
+
     private var session: Session?
     private var fired = false
     private var blockedUntilLift = false
+
+    private var twoFingerSession: TwoFingerSession?
+    private var twoFingerFired = false
+    private var blockTwoFingerUntilLift = false
 
     public init(sensitivity: Float = 1.0) {
         self.sensitivity = min(max(sensitivity, 0.55), 1.8)
         axisDominance = 1.35
         spreadTolerance = 0.07
         longCloseDistance = 0.20
+        closeApplicationEnabled = true
+        twoFingerCloseEnabled = false
     }
 
     public mutating func reset() {
         session = nil
         fired = false
         blockedUntilLift = false
+        twoFingerSession = nil
+        twoFingerFired = false
+        blockTwoFingerUntilLift = false
+        suppressTwoFingerScroll = false
     }
 
     public mutating func process(_ frame: TrackpadTouchFrame) -> TrackpadWindowAction? {
-        guard frame.count >= 3 else {
+        if frame.count == 2 {
+            return processTwoFinger(frame)
+        }
+
+        if frame.count == 0 {
             reset()
             return nil
         }
+
+        if frame.count == 1 {
+            // Keep the "no two-finger close" lock until the pad is completely
+            // empty. A single finger may still be left over from a 3/4-finger
+            // gesture, and adding one more must not start a close.
+            session = nil
+            fired = false
+            blockedUntilLift = false
+            twoFingerSession = nil
+            twoFingerFired = false
+            suppressTwoFingerScroll = false
+            return nil
+        }
+
+        // A three/four-finger gesture owns the pad now. Do not let the fingers
+        // that remain during its lift turn into a two-finger close afterwards.
+        suppressTwoFingerScroll = false
+        twoFingerSession = nil
+        twoFingerFired = false
+        blockTwoFingerUntilLift = true
+
         guard frame.count <= 4 else {
             session = nil
             blockedUntilLift = true
@@ -147,9 +193,6 @@ public struct TrackpadSwipeRecognizer: Sendable {
         let action: TrackpadWindowAction?
 
         if current.waitingForLongClose {
-            // Once a 4-finger right gesture has entered the long-close lane,
-            // it can only finish as a close. Curving into another direction
-            // must not minimize or restore anything.
             guard dx > 0, absX > absY * axisDominance,
                   absX >= longCloseDistance
             else {
@@ -163,6 +206,11 @@ public struct TrackpadSwipeRecognizer: Sendable {
         if absX > absY * axisDominance, absX > threshold {
             if current.fingers == 4 {
                 if dx > 0 {
+                    guard closeApplicationEnabled else {
+                        blockedUntilLift = true
+                        session = nil
+                        return nil
+                    }
                     // Right is a two-stage gesture. A normal swipe does not
                     // fire; only a deliberate long continuation quits the app.
                     guard absX >= longCloseDistance else {
@@ -188,8 +236,6 @@ public struct TrackpadSwipeRecognizer: Sendable {
                 action = dy > 0 ? .maximize : .minimizeFocused
             }
         } else {
-            // A clear diagonal is not a window swipe. Once it is large enough,
-            // stop interpreting this touch session altogether.
             if movement > 0.14 {
                 blockedUntilLift = true
             }
@@ -207,7 +253,60 @@ public struct TrackpadSwipeRecognizer: Sendable {
         return action
     }
 
+    private mutating func processTwoFinger(_ frame: TrackpadTouchFrame) -> TrackpadWindowAction? {
+        guard twoFingerCloseEnabled, closeApplicationEnabled else {
+            suppressTwoFingerScroll = false
+            twoFingerSession = nil
+            return nil
+        }
+        guard !blockTwoFingerUntilLift else {
+            suppressTwoFingerScroll = false
+            return nil
+        }
+        guard !twoFingerFired else { return nil }
+
+        if twoFingerSession == nil {
+            twoFingerSession = TwoFingerSession(
+                startX: frame.x,
+                startY: frame.y,
+                startSpread: frame.spread,
+                startTime: frame.timestamp
+            )
+            suppressTwoFingerScroll = false
+            return nil
+        }
+
+        guard let current = twoFingerSession else { return nil }
+        let dx = frame.x - current.startX
+        let dy = frame.y - current.startY
+        let movement = sqrt(dx * dx + dy * dy)
+        let spreadDelta = abs(frame.spread - current.startSpread)
+
+        guard movement >= 0.018, spreadDelta <= spreadTolerance else {
+            suppressTwoFingerScroll = false
+            return nil
+        }
+
+        let absX = abs(dx)
+        let absY = abs(dy)
+        guard dx > 0, absX > absY * axisDominance else {
+            suppressTwoFingerScroll = false
+            return nil
+        }
+
+        // Suppress app scrolling while the candidate is clearly a long
+        // horizontal right gesture. The first few frames can still reach the
+        // app; the option is opt-in and the UI explains that trade-off.
+        suppressTwoFingerScroll = true
+
+        guard absX >= longCloseDistance else {
+            return nil
+        }
+        twoFingerFired = true
+        return .closeApplication
+    }
+
     public var currentFingerCount: Int {
-        session?.fingers ?? 0
+        session?.fingers ?? (twoFingerSession != nil ? 2 : 0)
     }
 }

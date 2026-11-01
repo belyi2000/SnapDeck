@@ -26,6 +26,10 @@ bool SDMTStart(SDTouchFrameCallback callback, void *context);
 
 void SDMTStop(void);
 
+/// Keep two-finger frames as well (needed for the optional two-finger close
+/// gesture). Pass 3 for the normal three/four-finger gesture mode.
+void SDMTSetMinimumContactCount(int32_t count);
+
 /// True when the private framework and all required symbols are available.
 bool SDMTIsAvailable(void);
 

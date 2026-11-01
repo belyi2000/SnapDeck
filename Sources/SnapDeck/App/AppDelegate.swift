@@ -79,7 +79,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .snapRight:
                 self.coordinator.perform(.rightHalf)
             case .maximize:
-                self.coordinator.perform(.maximize)
+                if self.settings.trackpadUpToggleEnabled {
+                    self.coordinator.toggleMaximizeGesture()
+                } else {
+                    self.coordinator.perform(.maximize)
+                }
             case .minimizeFocused:
                 _ = self.windows.minimizeFocusedWindow()
             case .minimizeAll:
@@ -149,6 +153,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { [weak self] in
                 self?.updates.checkForUpdates(nil)
             }
+        }
+        // Automation hooks for verifying the LaunchAgent without UI clicks.
+        if CommandLine.arguments.contains("--enable-autostart") {
+            settings.setLaunchAtLogin(true)
+        }
+        if CommandLine.arguments.contains("--disable-autostart") {
+            settings.setLaunchAtLogin(false)
         }
     }
 

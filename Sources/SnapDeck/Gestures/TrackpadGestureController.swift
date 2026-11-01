@@ -21,12 +21,28 @@ final class TrackpadGestureController: ObservableObject {
     private let activity = TouchActivityState()
     private let suppressor: TrackpadEventSuppressor
     private var recognizer = TrackpadSwipeRecognizer()
+    private var settingsCancellable: AnyCancellable?
 
     init(settings: AppSettings, permissions: PermissionManager) {
         self.settings = settings
         self.permissions = permissions
         self.suppressor = TrackpadEventSuppressor(activity: activity)
         self.recognizer.sensitivity = Float(settings.trackpadGestureSensitivity)
+        self.settingsCancellable = settings.$closeWithTwoFingers
+            .combineLatest(
+                settings.$trackpadGesturesEnabled,
+                settings.$closeApplicationGestureEnabled
+            )
+            .receive(on: RunLoop.main)
+            .sink { [weak self] twoFinger, gesturesEnabled, closeEnabled in
+                guard let self else { return }
+                self.bridge.setMinimumContactCount(
+                    (twoFinger && gesturesEnabled && closeEnabled) ? 2 : 3
+                )
+                if !twoFinger || !closeEnabled {
+                    self.activity.setTwoFingerSuppression(false)
+                }
+            }
     }
 
     func startIfEnabled() {
@@ -60,6 +76,11 @@ final class TrackpadGestureController: ObservableObject {
         guard !isRunning else { return true }
 
         refreshStatus()
+        bridge.setMinimumContactCount(
+            (settings.closeWithTwoFingers
+                && settings.trackpadGesturesEnabled
+                && settings.closeApplicationGestureEnabled) ? 2 : 3
+        )
         let touchActivity = activity
         let started = bridge.start { [weak self] frame in
             touchActivity.update(count: frame.count)
@@ -85,6 +106,7 @@ final class TrackpadGestureController: ObservableObject {
         bridge.stop()
         suppressor.stop()
         recognizer.reset()
+        activity.setTwoFingerSuppression(false)
         liveFingerCount = 0
         suppressionRunning = false
         isRunning = false
@@ -133,11 +155,14 @@ final class TrackpadGestureController: ObservableObject {
     private func handle(_ frame: TrackpadTouchFrame) {
         liveFingerCount = frame.count
         recognizer.sensitivity = Float(settings.trackpadGestureSensitivity)
-        guard let action = recognizer.process(frame),
-              settings.isEnabled
-        else {
-            return
-        }
+        recognizer.longCloseDistance = Float(settings.closeSwipeDistance)
+        recognizer.closeApplicationEnabled = settings.closeApplicationGestureEnabled
+        recognizer.twoFingerCloseEnabled = settings.closeWithTwoFingers
+
+        let action = recognizer.process(frame)
+        activity.setTwoFingerSuppression(recognizer.suppressTwoFingerScroll)
+
+        guard let action, settings.isEnabled else { return }
 
         lastAction = action
         let haptic = NSHapticFeedbackManager.defaultPerformer

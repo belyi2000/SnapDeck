@@ -274,8 +274,12 @@ check(clampLeft.maxX >= 160, "unsnap keeps part of the title bar reachable")
 
 // MARK: - Trackpad swipe recognizer
 
-func recognize(_ frames: [(Int, Float, Float, Float)]) -> [TrackpadWindowAction] {
+func runRecognizer(
+    _ frames: [(Int, Float, Float, Float)],
+    configure: (inout TrackpadSwipeRecognizer) -> Void = { _ in }
+) -> (actions: [TrackpadWindowAction], recognizer: TrackpadSwipeRecognizer) {
     var recognizer = TrackpadSwipeRecognizer(sensitivity: 1.0)
+    configure(&recognizer)
     var actions: [TrackpadWindowAction] = []
     for (index, point) in frames.enumerated() {
         let frame = TrackpadTouchFrame(
@@ -289,7 +293,14 @@ func recognize(_ frames: [(Int, Float, Float, Float)]) -> [TrackpadWindowAction]
             actions.append(action)
         }
     }
-    return actions
+    return (actions, recognizer)
+}
+
+func recognize(
+    _ frames: [(Int, Float, Float, Float)],
+    configure: (inout TrackpadSwipeRecognizer) -> Void = { _ in }
+) -> [TrackpadWindowAction] {
+    runRecognizer(frames, configure: configure).actions
 }
 
 let startThree: (Int, Float, Float, Float) = (3, 0.50, 0.50, 0.20)
@@ -323,6 +334,196 @@ check(
 check(
     recognize([startThree, (3, 0.42, 0.50, 0.20), (3, 0.38, 0.50, 0.20)]).count == 1,
     "recognizer does not repeat after firing"
+)
+
+// MARK: - Two-finger close and adjustable distance
+
+let startTwo: (Int, Float, Float, Float) = (2, 0.50, 0.50, 0.14)
+let twoFingerClose: (inout TrackpadSwipeRecognizer) -> Void = { recognizer in
+    recognizer.closeApplicationEnabled = true
+    recognizer.twoFingerCloseEnabled = true
+    recognizer.longCloseDistance = 0.20
+}
+
+check(
+    recognize([startTwo, (2, 0.72, 0.50, 0.14)], configure: twoFingerClose) == [.closeApplication],
+    "long 2-finger right closes the app when enabled"
+)
+check(
+    recognize([startTwo, (2, 0.62, 0.50, 0.14)]).isEmpty,
+    "short 2-finger right is reserved by default"
+)
+check(
+    recognize(
+        [startTwo, (2, 0.62, 0.50, 0.14)],
+        configure: { recognizer in
+            twoFingerClose(&recognizer)
+            recognizer.longCloseDistance = 0.10
+        }
+    ) == [.closeApplication],
+    "a shorter close distance makes a shorter 2-finger swipe close"
+)
+check(
+    recognize(
+        [startTwo, (2, 0.72, 0.50, 0.14)],
+        configure: { recognizer in
+            twoFingerClose(&recognizer)
+            recognizer.longCloseDistance = 0.40
+        }
+    ).isEmpty,
+    "a longer close distance rejects a 2-finger swipe that is too short"
+)
+check(
+    recognize([startTwo, (2, 0.72, 0.50, 0.14)]).isEmpty,
+    "2-finger close stays off until explicitly enabled"
+)
+check(
+    recognize(
+        [startTwo, (2, 0.72, 0.50, 0.14)],
+        configure: { recognizer in
+            twoFingerClose(&recognizer)
+            recognizer.closeApplicationEnabled = false
+        }
+    ).isEmpty,
+    "disabling close also disables the 2-finger variant"
+)
+check(
+    recognize(
+        [startFour, (4, 0.72, 0.50, 0.28)],
+        configure: { recognizer in recognizer.closeApplicationEnabled = false }
+    ).isEmpty,
+    "disabling close disables the 4-finger variant"
+)
+check(
+    recognize(
+        [startFour, (4, 0.72, 0.50, 0.28)],
+        configure: { recognizer in recognizer.longCloseDistance = 0.40 }
+    ).isEmpty,
+    "the shared close distance also applies to 4 fingers"
+)
+
+let afterThreeFinger = runRecognizer(
+    [
+        startThree,
+        (3, 0.50, 0.58, 0.20),
+        (2, 0.60, 0.50, 0.14),
+        (2, 0.76, 0.50, 0.14)
+    ],
+    configure: twoFingerClose
+)
+check(
+    afterThreeFinger.actions == [.maximize],
+    "two fingers left after a 3-finger gesture do not close the app"
+)
+check(
+    recognize(
+        [
+            startThree,
+            (3, 0.50, 0.58, 0.20),
+            (0, 0, 0, 0),
+            startTwo,
+            (2, 0.74, 0.50, 0.14)
+        ],
+        configure: twoFingerClose
+    ) == [.maximize, .closeApplication],
+    "a fresh 2-finger session after a full lift can still close"
+)
+check(
+    recognize(
+        [
+            startThree,
+            (3, 0.50, 0.58, 0.20),
+            (2, 0.60, 0.50, 0.14),
+            (1, 0.60, 0.50, 0.14),
+            startTwo,
+            (2, 0.76, 0.50, 0.14)
+        ],
+        configure: twoFingerClose
+    ) == [.maximize],
+    "the 2-finger close lock survives while one finger remains on the pad"
+)
+check(
+    recognize(
+        [
+            startThree,
+            (3, 0.50, 0.58, 0.20),
+            (2, 0.60, 0.50, 0.14),
+            (1, 0.60, 0.50, 0.14),
+            (0, 0, 0, 0),
+            startTwo,
+            (2, 0.76, 0.50, 0.14)
+        ],
+        configure: twoFingerClose
+    ) == [.maximize, .closeApplication],
+    "the 2-finger close lock clears only after the pad is fully empty"
+)
+check(
+    recognize(
+        [startTwo, (2, 0.56, 0.50, 0.14), (2, 0.60, 0.50, 0.14)],
+        configure: twoFingerClose
+    ).isEmpty,
+    "2-finger right does not fire before the close distance"
+)
+
+var suppressionRecognizer = TrackpadSwipeRecognizer(sensitivity: 1.0)
+twoFingerClose(&suppressionRecognizer)
+_ = suppressionRecognizer.process(
+    TrackpadTouchFrame(count: 2, x: 0.50, y: 0.50, spread: 0.14, timestamp: 0)
+)
+_ = suppressionRecognizer.process(
+    TrackpadTouchFrame(count: 2, x: 0.60, y: 0.50, spread: 0.14, timestamp: 0.016)
+)
+check(
+    suppressionRecognizer.suppressTwoFingerScroll,
+    "2-finger scroll is suppressed only after a right close candidate appears"
+)
+_ = suppressionRecognizer.process(
+    TrackpadTouchFrame(count: 0, x: 0, y: 0, spread: 0, timestamp: 0.032)
+)
+check(
+    !suppressionRecognizer.suppressTwoFingerScroll,
+    "2-finger suppression ends on lift"
+)
+
+var noSuppression = TrackpadSwipeRecognizer(sensitivity: 1.0)
+twoFingerClose(&noSuppression)
+_ = noSuppression.process(
+    TrackpadTouchFrame(count: 2, x: 0.50, y: 0.50, spread: 0.14, timestamp: 0)
+)
+_ = noSuppression.process(
+    TrackpadTouchFrame(count: 2, x: 0.50, y: 0.40, spread: 0.14, timestamp: 0.016)
+)
+check(
+    !noSuppression.suppressTwoFingerScroll,
+    "2-finger vertical scroll is not suppressed"
+)
+
+// MARK: - LaunchAgent plist
+
+let agent = LaunchAtLoginManager.agentPropertyList(
+    applicationPath: "/Applications/SnapDeck.app"
+)
+check(
+    agent["Label"] as? String == "com.dmitry.snapdeck.login",
+    "login agent uses the SnapDeck label"
+)
+check(
+    (agent["ProgramArguments"] as? [String])
+        == ["/usr/bin/open", "-a", "/Applications/SnapDeck.app"],
+    "login agent opens the exact app bundle"
+)
+check(agent["RunAtLoad"] as? Bool == true, "login agent starts at login")
+check(
+    agent["LimitLoadToSessionType"] as? String == "Aqua",
+    "login agent is limited to the user GUI session"
+)
+check(
+    (try? PropertyListSerialization.data(
+        fromPropertyList: agent,
+        format: .xml,
+        options: 0
+    )) != nil,
+    "login agent plist serializes"
 )
 
 // MARK: - Frame history
